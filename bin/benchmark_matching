@@ -1,0 +1,92 @@
+#!/usr/bin/env python
+
+import argparse
+import datetime
+import logging
+import os.path
+import shutil
+
+from timeit import default_timer as timer
+
+from opensfm import bow
+from opensfm import commands
+from opensfm import dataset
+from opensfm import features
+from opensfm import io
+from opensfm import log
+
+
+logger = logging.getLogger(__name__)
+log.setup()
+
+
+def create_bench_dir(dataset):
+    dataset_dir = os.path.basename(os.path.normpath(dataset))
+
+    base_dir = os.path.dirname(os.path.dirname(dataset)) if \
+        os.path.isdir(dataset) else \
+        os.path.dirname(dataset)
+
+    bench_dir = os.path.join(
+        base_dir,
+        dataset_dir + \
+        "_bench_feat_match_" + \
+        datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+
+    io.mkdir_p(bench_dir)
+
+    return bench_dir
+
+
+def create_brute_force_dir(orig_dir, bench_dir):
+    shutil.copytree(orig_dir, os.path.join(bench_dir, "bruteforce"))
+
+
+def create_flann_dir(orig_dir, bench_dir):
+    shutil.copytree(orig_dir, os.path.join(bench_dir, "flann"))
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('dataset')
+    args = parser.parse_args([os.path.join(bench_dir, "flann")])
+
+    data = dataset.DataSet(args.dataset)
+
+    for image in data.images():
+        p, f, c = data.load_features(image)
+        index = features.build_flann_index(f, data.config)
+        data.save_feature_index(image, index)
+
+
+def create_words_dir(orig_dir, bench_dir):
+    shutil.copytree(orig_dir, os.path.join(bench_dir, "words"))
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('dataset')
+    args = parser.parse_args([os.path.join(bench_dir, "words")])
+
+    data = dataset.DataSet(args.dataset)
+
+    for image in data.images():
+        bows = bow.load_bows(data.config)
+        n_closest = data.config['bow_words_to_match']
+        p, f, c = data.load_features(image)
+        closest_words = bows.map_to_words(
+            f, n_closest, data.config['bow_matcher_type'])
+        data.save_words(image, closest_words)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Benchmark feature matching algorithms')
+    parser.add_argument('dataset',
+                        help='path to the dataset to be processed')
+
+    args = parser.parse_args()
+
+    commands.extract_metadata.Command().run(args)
+    commands.detect_features.Command().run(args)
+
+    bench_dir = create_bench_dir(args.dataset)
+
+    create_brute_force_dir(args.dataset, bench_dir)
+    create_flann_dir(args.dataset, bench_dir)
+    create_words_dir(args.dataset, bench_dir)
