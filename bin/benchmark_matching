@@ -5,6 +5,7 @@ import datetime
 import logging
 import os.path
 import shutil
+import yaml
 
 from timeit import default_timer as timer
 
@@ -38,16 +39,32 @@ def create_bench_dir(dataset):
     return bench_dir
 
 
-def create_brute_force_dir(orig_dir, bench_dir):
-    shutil.copytree(orig_dir, os.path.join(bench_dir, "bruteforce"))
+def create_brute_force_dataset(orig_dir, bench_dir):
+    work_dir = os.path.join(bench_dir, "bruteforce")
+    shutil.copytree(orig_dir, work_dir)
 
-
-def create_flann_dir(orig_dir, bench_dir):
-    shutil.copytree(orig_dir, os.path.join(bench_dir, "flann"))
+    config = load_config(work_dir)
+    config["matcher_type"] = "BRUTEFORCE"
+    save_config(config, work_dir)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset')
-    args = parser.parse_args([os.path.join(bench_dir, "flann")])
+    args = parser.parse_args([work_dir])
+
+    return dataset.DataSet(args.dataset)
+
+
+def create_flann_dataset(orig_dir, bench_dir):
+    work_dir = os.path.join(bench_dir, "flann")
+    shutil.copytree(orig_dir, work_dir)
+
+    config = load_config(work_dir)
+    config["matcher_type"] = "FLANN"
+    save_config(config, work_dir)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('dataset')
+    args = parser.parse_args([work_dir])
 
     data = dataset.DataSet(args.dataset)
 
@@ -56,13 +73,20 @@ def create_flann_dir(orig_dir, bench_dir):
         index = features.build_flann_index(f, data.config)
         data.save_feature_index(image, index)
 
+    return data
 
-def create_words_dir(orig_dir, bench_dir):
-    shutil.copytree(orig_dir, os.path.join(bench_dir, "words"))
+
+def create_words_dataset(orig_dir, bench_dir):
+    work_dir = os.path.join(bench_dir, "words")
+    shutil.copytree(orig_dir, work_dir)
+
+    config = load_config(work_dir)
+    config["matcher_type"] = "WORDS"
+    save_config(config, work_dir)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset')
-    args = parser.parse_args([os.path.join(bench_dir, "words")])
+    args = parser.parse_args([work_dir])
 
     data = dataset.DataSet(args.dataset)
 
@@ -73,6 +97,26 @@ def create_words_dir(orig_dir, bench_dir):
         closest_words = bows.map_to_words(
             f, n_closest, data.config['bow_matcher_type'])
         data.save_words(image, closest_words)
+
+    return data
+
+
+def load_config(work_dir):
+    config = {}
+    filepath = os.path.join(work_dir, "config.yaml")
+    if os.path.isfile(filepath):
+        with open(filepath) as fin:
+            new_config = yaml.safe_load(fin)
+        if new_config:
+            for k, v in new_config.items():
+                config[k] = v
+
+    return config
+
+
+def save_config(config, work_dir):
+    with open(os.path.join(work_dir, 'config.yaml'), 'w') as fout:
+        yaml.dump(config, fout, default_flow_style=False)
 
 
 if __name__ == "__main__":
@@ -87,6 +131,6 @@ if __name__ == "__main__":
 
     bench_dir = create_bench_dir(args.dataset)
 
-    create_brute_force_dir(args.dataset, bench_dir)
-    create_flann_dir(args.dataset, bench_dir)
-    create_words_dir(args.dataset, bench_dir)
+    bf_data = create_brute_force_dataset(args.dataset, bench_dir)
+    f_data = create_flann_dataset(args.dataset, bench_dir)
+    w_data = create_words_dataset(args.dataset, bench_dir)
