@@ -7,6 +7,7 @@ import os.path
 import shutil
 import yaml
 
+from itertools import combinations
 from timeit import default_timer as timer
 
 from opensfm import bow
@@ -15,6 +16,7 @@ from opensfm import dataset
 from opensfm import features
 from opensfm import io
 from opensfm import log
+from opensfm import matching
 
 
 logger = logging.getLogger(__name__)
@@ -119,6 +121,49 @@ def save_config(config, work_dir):
         yaml.dump(config, fout, default_flow_style=False)
 
 
+def match(data):
+    images = data.images()
+    images.sort()
+
+    pairs = combinations(images, 2)
+    comb = {im: [] for im in images}
+    for im1, im2 in pairs:
+        comb[im1].append(im2)
+
+    matcher_type = data.config['matcher_type']
+
+    for im1 in comb:
+        im1_matches = {}
+
+        print im1, comb[im1]
+
+        for im2 in comb[im1]:
+            # symmetric matching
+            t = timer()
+            p1, f1, c1 = data.load_features(im1)
+            p2, f2, c2 = data.load_features(im2)
+
+            if matcher_type == 'WORDS':
+                w1 = data.load_words(im1)
+                w2 = data.load_words(im2)
+                matches = matching.match_words_symmetric(f1, w1, f2, w2,data.config)
+            elif matcher_type == 'FLANN':
+                i1 = data.load_feature_index(im1, f1)
+                i2 = data.load_feature_index(im2, f2)
+                matches = matching.match_flann_symmetric(f1, i1, f2, i2,data.config)
+            elif matcher_type == 'BRUTEFORCE':
+                matches = matching.match_brute_force_symmetric(f1, f2,data.config)
+            else:
+                raise ValueError("Invalid matcher_type: {}".format(matcher_type))
+
+            im1_matches[im2] = matches
+
+            logger.debug('{} - {} has {} initial matches'.format(
+                im1, im2, len(matches)))
+
+        data.save_matches(im1, im1_matches)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Benchmark feature matching algorithms')
     parser.add_argument('dataset',
@@ -131,6 +176,10 @@ if __name__ == "__main__":
 
     bench_dir = create_bench_dir(args.dataset)
 
-    bf_data = create_brute_force_dataset(args.dataset, bench_dir)
+    b_data = create_brute_force_dataset(args.dataset, bench_dir)
     f_data = create_flann_dataset(args.dataset, bench_dir)
     w_data = create_words_dataset(args.dataset, bench_dir)
+
+    match(b_data)
+    match(f_data)
+    match(w_data)
