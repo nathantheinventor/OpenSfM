@@ -132,6 +132,7 @@ def match(data):
 
     matcher_type = data.config['matcher_type']
 
+    matching_time = []
 
     for im1 in comb:
         im1_matches = {}
@@ -166,10 +167,16 @@ def match(data):
             logger.debug('{} - {} has {} initial matches'.format(
                 im1, im2, len(matches)))
 
+            matching_time.append(timer() - t)
+
             logger.info('Matching time ({0}, {1}-{2}, {3}-{4}): {5}s'.format(
-                matcher_type, im1, im2, len(f1), len(f2), timer() - t))
+                matcher_type, im1, im2, len(f1), len(f2), matching_time[-1]))
 
         data.save_matches(im1, im1_matches)
+
+    logger.info("Average matching time ({}): {}".format(
+        matcher_type,
+        sum(matching_time) / len(matching_time)))
 
 
 def load_matches(data):
