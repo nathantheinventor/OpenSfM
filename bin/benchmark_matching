@@ -132,10 +132,13 @@ def match(data):
 
     matcher_type = data.config['matcher_type']
 
+
     for im1 in comb:
         im1_matches = {}
 
         for im2 in comb[im1]:
+            t = timer()
+
             # symmetric matching
             t = timer()
             p1, f1, c1 = data.load_features(im1)
@@ -144,20 +147,27 @@ def match(data):
             if matcher_type == 'WORDS':
                 w1 = data.load_words(im1)
                 w2 = data.load_words(im2)
-                matches = matching.match_words_symmetric(f1, w1, f2, w2,data.config)
+                matches = matching.match_words_symmetric(
+                    f1, w1, f2, w2,data.config)
             elif matcher_type == 'FLANN':
                 i1 = data.load_feature_index(im1, f1)
                 i2 = data.load_feature_index(im2, f2)
-                matches = matching.match_flann_symmetric(f1, i1, f2, i2,data.config)
+                matches = matching.match_flann_symmetric(
+                    f1, i1, f2, i2,data.config)
             elif matcher_type == 'BRUTEFORCE':
-                matches = matching.match_brute_force_symmetric(f1, f2,data.config)
+                matches = matching.match_brute_force_symmetric(
+                    f1, f2,data.config)
             else:
-                raise ValueError("Invalid matcher_type: {}".format(matcher_type))
+                raise ValueError("Invalid matcher_type: {}".format(
+                    matcher_type))
 
             im1_matches[im2] = matches
 
             logger.debug('{} - {} has {} initial matches'.format(
                 im1, im2, len(matches)))
+
+            logger.info('Matching time ({0}, {1}-{2}, {3}-{4}): {5}s'.format(
+                matcher_type, im1, im2, len(f1), len(f2), timer() - t))
 
         data.save_matches(im1, im1_matches)
 
@@ -209,9 +219,9 @@ def report(res, method_name):
     false_pos = len(res["false_pos"])
     false_neg = len(res["false_neg"])
 
-    print "Report for " + method_name
-    print "Precision:", float(true_pos) / (true_pos + false_pos)
-    print "Recall:", float(true_pos) / (true_pos + false_neg)
+    logger.info("Report for {}".format(method_name))
+    logger.info("Precision: {}".format(float(true_pos) / (true_pos + false_pos)))
+    logger.info("Recall: {}".format(float(true_pos) / (true_pos + false_neg)))
 
 
 if __name__ == "__main__":
