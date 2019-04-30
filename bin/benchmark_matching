@@ -135,8 +135,6 @@ def match(data):
     for im1 in comb:
         im1_matches = {}
 
-        print im1, comb[im1]
-
         for im2 in comb[im1]:
             # symmetric matching
             t = timer()
@@ -164,6 +162,58 @@ def match(data):
         data.save_matches(im1, im1_matches)
 
 
+def load_matches(data):
+    matches = {}
+    for im1 in data.images():
+        m = data.load_matches(im1)
+        for im2 in m:
+            matches[tuple(sorted([im1, im2]))] = m[im2]
+
+    return matches
+
+
+def benchmark_matches(matches, truth):
+    res = {
+        "true_pos": [],
+        "false_pos": [],
+        "false_neg": [],
+    }
+
+    for pair in truth:
+        if pair not in matches:
+            res["false_neg"] = truth[pair]
+            continue
+
+        m = matches[pair]
+        for match in truth[pair]:
+            if match in m:
+                res["true_pos"].append(match)
+            else:
+                res["false_neg"].append(match)
+
+    for pair in matches:
+        if pair not in truth:
+            res["false_pos"] = matches[pair]
+            continue
+
+        t = truth[pair]
+        for match in matches[pair]:
+            if match not in t:
+                res["false_pos"].append(match)
+
+    return res
+
+
+def report(res, method_name):
+    true_pos = len(res["true_pos"])
+    false_pos = len(res["false_pos"])
+    false_neg = len(res["false_neg"])
+
+    print "Report for " + method_name
+    print "Precision:", float(true_pos) / (true_pos + false_pos)
+    print "Recall:", float(true_pos) / (true_pos + false_neg)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Benchmark feature matching algorithms')
     parser.add_argument('dataset',
@@ -183,3 +233,13 @@ if __name__ == "__main__":
     match(b_data)
     match(f_data)
     match(w_data)
+
+    b_matches = load_matches(b_data)
+    f_matches = load_matches(f_data)
+    w_matches = load_matches(w_data)
+
+    f_res = benchmark_matches(f_matches, b_matches)
+    w_res = benchmark_matches(w_matches, b_matches)
+
+    report(f_res, f_data.config["matcher_type"])
+    report(w_res, w_data.config["matcher_type"])
