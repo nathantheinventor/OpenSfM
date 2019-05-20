@@ -6,6 +6,7 @@ import logging
 import os.path
 import shutil
 import yaml
+import math
 
 from itertools import combinations
 from timeit import default_timer as timer
@@ -18,22 +19,24 @@ from opensfm import io
 from opensfm import log
 from opensfm import matching
 
+from opensfm import csfm
+
 
 logger = logging.getLogger(__name__)
 log.setup()
 
 
 def create_bench_dir(dataset):
-    dataset_dir = os.path.basename(os.path.normpath(dataset))
-
-    base_dir = os.path.dirname(os.path.dirname(dataset)) if \
+    base_dir = os.path.dirname(os.path.normpath(dataset)) if \
         os.path.isdir(dataset) else \
         os.path.dirname(dataset)
+
+    dataset_dir = os.path.basename(os.path.normpath(dataset))
 
     bench_dir = os.path.join(
         base_dir,
         dataset_dir + \
-        "_bench_feat_match_" + \
+        "__bench_feat_match__" + \
         datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
 
     io.mkdir_p(bench_dir)
@@ -41,13 +44,32 @@ def create_bench_dir(dataset):
     return bench_dir
 
 
-def create_brute_force_dataset(orig_dir, bench_dir):
+def create_dataset(orig_dir, bench_dir, config):
+    if config["matcher_type"] == "FLANN":
+        return create_flann_dataset(orig_dir, bench_dir, config)
+    elif config["matcher_type"] == "WORDS":
+        return create_words_dataset(orig_dir, bench_dir, config)
+    elif config["matcher_type"] == "CASCADE_HASHING":
+        return create_cascade_hashing_dataset(orig_dir, bench_dir, config)
+    else:
+        raise ValueError("Invalid matcher_type: {}".format(
+            matcher_type))
+
+
+def overwrite_config(config, work_dir):
+    orig_config = load_config(work_dir)
+
+    for key, value in config.items():
+        orig_config[key] = value
+
+    save_config(orig_config, work_dir)
+
+
+def create_brute_force_dataset(orig_dir, bench_dir, config):
     work_dir = os.path.join(bench_dir, "bruteforce")
     shutil.copytree(orig_dir, work_dir)
 
-    config = load_config(work_dir)
-    config["matcher_type"] = "BRUTEFORCE"
-    save_config(config, work_dir)
+    overwrite_config(config, work_dir)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset')
@@ -56,13 +78,11 @@ def create_brute_force_dataset(orig_dir, bench_dir):
     return dataset.DataSet(args.dataset)
 
 
-def create_flann_dataset(orig_dir, bench_dir):
+def create_flann_dataset(orig_dir, bench_dir, config):
     work_dir = os.path.join(bench_dir, "flann")
     shutil.copytree(orig_dir, work_dir)
 
-    config = load_config(work_dir)
-    config["matcher_type"] = "FLANN"
-    save_config(config, work_dir)
+    overwrite_config(config, work_dir)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset')
@@ -78,13 +98,11 @@ def create_flann_dataset(orig_dir, bench_dir):
     return data
 
 
-def create_words_dataset(orig_dir, bench_dir):
+def create_words_dataset(orig_dir, bench_dir, config):
     work_dir = os.path.join(bench_dir, "words")
     shutil.copytree(orig_dir, work_dir)
 
-    config = load_config(work_dir)
-    config["matcher_type"] = "WORDS"
-    save_config(config, work_dir)
+    overwrite_config(config, work_dir)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset')
@@ -99,6 +117,21 @@ def create_words_dataset(orig_dir, bench_dir):
         closest_words = bows.map_to_words(
             f, n_closest, data.config['bow_matcher_type'])
         data.save_words(image, closest_words)
+
+    return data
+
+
+def create_cascade_hashing_dataset(orig_dir, bench_dir, config):
+    work_dir = os.path.join(bench_dir, "cascade_hashing")
+    shutil.copytree(orig_dir, work_dir)
+
+    overwrite_config(config, work_dir)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('dataset')
+    args = parser.parse_args([work_dir])
+
+    data = dataset.DataSet(args.dataset)
 
     return data
 
@@ -138,45 +171,53 @@ def match(data):
         im1_matches = {}
 
         for im2 in comb[im1]:
-            t = timer()
-
             # symmetric matching
-            t = timer()
             p1, f1, c1 = data.load_features(im1)
             p2, f2, c2 = data.load_features(im2)
 
             if matcher_type == 'WORDS':
                 w1 = data.load_words(im1)
                 w2 = data.load_words(im2)
+                t = timer()
                 matches = matching.match_words_symmetric(
                     f1, w1, f2, w2,data.config)
             elif matcher_type == 'FLANN':
                 i1 = data.load_feature_index(im1, f1)
                 i2 = data.load_feature_index(im2, f2)
+                t = timer()
                 matches = matching.match_flann_symmetric(
                     f1, i1, f2, i2,data.config)
             elif matcher_type == 'BRUTEFORCE':
+                t = timer()
                 matches = matching.match_brute_force_symmetric(
-                    f1, f2,data.config)
+                    f1, f2, data.config)
+            elif matcher_type == "CASCADE_HASHING":
+                t = timer()
+                matches = csfm.match_using_cascade_hashing(
+                    f1, f2, data.config['lowes_ratio'])
             else:
                 raise ValueError("Invalid matcher_type: {}".format(
                     matcher_type))
+
+            matching_time.append(timer() - t)
 
             im1_matches[im2] = matches
 
             logger.debug('{} - {} has {} initial matches'.format(
                 im1, im2, len(matches)))
 
-            matching_time.append(timer() - t)
-
             logger.info('Matching time ({0}, {1}-{2}, {3}-{4}): {5}s'.format(
                 matcher_type, im1, im2, len(f1), len(f2), matching_time[-1]))
 
         data.save_matches(im1, im1_matches)
 
-    logger.info("Average matching time ({}): {}".format(
+    mean_time = sum(matching_time) / len(matching_time)
+
+    logger.debug("Average matching time ({}): {}".format(
         matcher_type,
-        sum(matching_time) / len(matching_time)))
+        mean_time))
+
+    return mean_time
 
 
 def load_matches(data):
@@ -221,42 +262,128 @@ def benchmark_matches(matches, truth):
     return res
 
 
-def report(res, method_name):
-    true_pos = len(res["true_pos"])
-    false_pos = len(res["false_pos"])
-    false_neg = len(res["false_neg"])
+def match_and_report(data, bench_matches):
+    matching_time = match(data)
+    matches = load_matches(data)
+    bench_res = benchmark_matches(matches, bench_matches)
+    report(bench_res, data.config["matcher_type"])
 
+    precision, recall = precision_recall(bench_res)
+
+    return matching_time, precision, recall
+
+
+def precision_recall(bench_res):
+    true_pos = len(bench_res["true_pos"])
+    false_pos = len(bench_res["false_pos"])
+    false_neg = len(bench_res["false_neg"])
+
+    precision = float(true_pos) / (true_pos + false_pos)
+    recall = float(true_pos) / (true_pos + false_neg)
+
+    return precision, recall
+
+
+def report(res, method_name):
+    p, r = precision_recall(res)
+
+    logger.info("=============================")
     logger.info("Report for {}".format(method_name))
-    logger.info("Precision: {}".format(float(true_pos) / (true_pos + false_pos)))
-    logger.info("Recall: {}".format(float(true_pos) / (true_pos + false_neg)))
+    logger.info("Precision: {}".format(p))
+    logger.info("Recall: {}".format(r))
+    logger.info("=============================")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Benchmark feature matching algorithms')
-    parser.add_argument('dataset',
-                        help='path to the dataset to be processed')
+    parser.add_argument('--dataset', help='path to the dataset to be processed')
 
     args = parser.parse_args()
 
-    commands.extract_metadata.Command().run(args)
-    commands.detect_features.Command().run(args)
+    datasets = [args.dataset] if args.dataset else \
+        [
+            "data/benchmark_matching/amsterdam",
+            "data/benchmark_matching/copenhagen",
+            "data/benchmark_matching/lemans",
+            "data/benchmark_matching/malmo",
+            "data/benchmark_matching/malmohus",
+            "data/benchmark_matching/molleberga",
+            "data/benchmark_matching/portland",
+            "data/benchmark_matching/stapeln",
+        ]
 
-    bench_dir = create_bench_dir(args.dataset)
+    b_matches = {}
+    for d in datasets:
+        args.dataset = d
+        commands.extract_metadata.Command().run(args)
+        commands.detect_features.Command().run(args)
 
-    b_data = create_brute_force_dataset(args.dataset, bench_dir)
-    f_data = create_flann_dataset(args.dataset, bench_dir)
-    w_data = create_words_dataset(args.dataset, bench_dir)
+        bench_dir = create_bench_dir(d)
+        b_data = create_brute_force_dataset(d, bench_dir, { "lowes_ratio": 1.0, "matcher_type": "BRUTEFORCE" })
+        match(b_data)
+        b_matches[d] = load_matches(b_data)
 
-    match(b_data)
-    match(f_data)
-    match(w_data)
+    run_configs = [
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 100, "flann_branching": 16, "flann_checks": 200 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 100, "flann_branching": 16, "flann_checks": 20 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 100, "flann_branching": 16, "flann_checks": 10 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 200 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 20 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 10 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 5 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 8, "flann_checks": 200 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 8, "flann_checks": 20 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 8, "flann_checks": 10 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 16, "flann_checks": 200 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 16, "flann_checks": 20 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 16, "flann_checks": 10 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 64, "flann_checks": 200 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 64, "flann_checks": 20 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 64, "flann_checks": 10 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 4, "flann_branching": 16, "flann_checks": 200 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 4, "flann_branching": 16, "flann_checks": 20 },
+        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 4, "flann_branching": 16, "flann_checks": 10 },
+        { "lowes_ratio": 0.8, "matcher_type": "WORDS", "bow_num_checks": 100 },
+        { "lowes_ratio": 0.8, "matcher_type": "WORDS", "bow_num_checks": 20 },
+        { "lowes_ratio": 0.8, "matcher_type": "WORDS", "bow_num_checks": 5 },
+        { "lowes_ratio": 0.8, "matcher_type": "CASCADE_HASHING" },
+    ]
 
-    b_matches = load_matches(b_data)
-    f_matches = load_matches(f_data)
-    w_matches = load_matches(w_data)
+    bench_results =  []
+    for c in run_configs:
+        bench_result = {
+            "config": c,
+            "datasets": [],
+            "matching_times": [],
+            "precisions": [],
+            "recalls": []
+        }
 
-    f_res = benchmark_matches(f_matches, b_matches)
-    w_res = benchmark_matches(w_matches, b_matches)
+        for d in datasets:
+            bench_dir = create_bench_dir(d)
+            t_data = create_dataset(d, bench_dir, c)
+            t, p, r = match_and_report(t_data, b_matches[d])
 
-    report(f_res, f_data.config["matcher_type"])
-    report(w_res, w_data.config["matcher_type"])
+            bench_result["datasets"].append(d)
+            bench_result["matching_times"].append(str(t))
+            bench_result["precisions"].append(str(p))
+            bench_result["recalls"].append(str(r))
+
+        bench_results.append(bench_result)
+
+    for br in bench_results:
+        logger.info("========================================")
+        run_definition = "Report - "
+        for key, value in br["config"].items():
+            run_definition += key + ": " + str(value) + ", "
+
+        logger.info(run_definition)
+        logger.info("Dataset:")
+        logger.info("\t".join(br["datasets"]))
+        logger.info("Matching time:")
+        logger.info("\t".join(br["matching_times"]))
+        logger.info("Precision:")
+        logger.info("\t".join(br["precisions"]))
+        logger.info("Recall:")
+        logger.info("\t".join(br["recalls"]))
+        logger.info("========================================")
