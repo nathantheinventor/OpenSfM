@@ -3,6 +3,7 @@
 #include <pybind11/pybind11.h>
 
 #include "akaze_bind.h"
+#include "theia_bind.h"
 #include "bundle.h"
 #include "depthmap_bind.h"
 #include "hahog.cc"
@@ -72,6 +73,8 @@ PYBIND11_MODULE(csfm, m) {
   );
 
   m.def("match_using_words", csfm::match_using_words);
+
+  m.def("match_using_cascade_hashing", csfm::match_using_cascade_hashing);
 
   m.def("triangulate_bearings_dlt", csfm::TriangulateBearingsDLT);
   m.def("triangulate_bearings_midpoint", csfm::TriangulateBearingsMidpoint);
