@@ -105,6 +105,24 @@ add_definitions(-DVL_DISABLE_AVX)
 add_library(vl ${VLFEAT_SRCS})
 
 
+# Bundle
+include_directories(.)
+set(BUNDLE_FILES
+    bundle/src/error_utils.h
+    bundle/src/motion_prior_terms.h
+    bundle/src/absolute_motion_terms.h
+    bundle/src/relative_motion_terms.h
+    bundle/src/bundle_adjuster.cc)
+add_library(bundle ${BUNDLE_FILES})
+target_link_libraries(bundle PRIVATE
+    ${GFLAGS_LIBRARY}
+    ${GLOG_LIBRARY}
+    ${CERES_LIBRARIES}
+    ${LAPACK_LIBRARIES}
+    ${SUITESPARSE_LIBRARIES}
+)
+
+
 # Python wrapper
 pybind11_add_module(csfm
     csfm.cc
@@ -126,6 +144,7 @@ set(CSFM_LIBRARIES ${OpenCV_LIBS}
                     ${MKL_LIBRARIES}
                     vl
                     akaze
+                    bundle
                     theia)
 # Optional ones
 if(MKL_FOUND)
