@@ -278,8 +278,8 @@ def precision_recall(bench_res):
     false_pos = len(bench_res["false_pos"])
     false_neg = len(bench_res["false_neg"])
 
-    precision = float(true_pos) / (true_pos + false_pos)
-    recall = float(true_pos) / (true_pos + false_neg)
+    precision = 0 if true_pos == 0 else float(true_pos) / (true_pos + false_pos)
+    recall = 0 if true_pos == 0 else float(true_pos) / (true_pos + false_neg)
 
     return precision, recall
 
@@ -312,41 +312,45 @@ if __name__ == "__main__":
             "data/benchmark_matching/stapeln",
         ]
 
+    lowes_ratio = 1.0
+
     b_matches = {}
     for d in datasets:
         args.dataset = d
+        overwrite_config({ }, d)
+
         commands.extract_metadata.Command().run(args)
         commands.detect_features.Command().run(args)
 
         bench_dir = create_bench_dir(d)
-        b_data = create_brute_force_dataset(d, bench_dir, { "lowes_ratio": 1.0, "matcher_type": "BRUTEFORCE" })
+        b_data = create_brute_force_dataset(d, bench_dir, { "lowes_ratio": lowes_ratio, "matcher_type": "BRUTEFORCE" })
         match(b_data)
         b_matches[d] = load_matches(b_data)
 
     run_configs = [
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 100, "flann_branching": 16, "flann_checks": 200 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 100, "flann_branching": 16, "flann_checks": 20 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 100, "flann_branching": 16, "flann_checks": 10 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 200 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 20 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 10 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 5 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 8, "flann_checks": 200 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 8, "flann_checks": 20 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 8, "flann_checks": 10 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 16, "flann_checks": 200 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 16, "flann_checks": 20 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 16, "flann_checks": 10 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 64, "flann_checks": 200 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 64, "flann_checks": 20 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 64, "flann_checks": 10 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 4, "flann_branching": 16, "flann_checks": 200 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 4, "flann_branching": 16, "flann_checks": 20 },
-        { "lowes_ratio": 0.8, "matcher_type": "FLANN", "flann_iterations": 4, "flann_branching": 16, "flann_checks": 10 },
-        { "lowes_ratio": 0.8, "matcher_type": "WORDS", "bow_num_checks": 100 },
-        { "lowes_ratio": 0.8, "matcher_type": "WORDS", "bow_num_checks": 20 },
-        { "lowes_ratio": 0.8, "matcher_type": "WORDS", "bow_num_checks": 5 },
-        { "lowes_ratio": 0.8, "matcher_type": "CASCADE_HASHING" },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 100, "flann_branching": 16, "flann_checks": 200 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 100, "flann_branching": 16, "flann_checks": 20 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 100, "flann_branching": 16, "flann_checks": 10 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 200 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 20 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 10 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 4, "flann_checks": 5 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 8, "flann_checks": 200 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 8, "flann_checks": 20 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 8, "flann_checks": 10 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 16, "flann_checks": 200 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 16, "flann_checks": 20 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 16, "flann_checks": 10 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 64, "flann_checks": 200 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 64, "flann_checks": 20 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 10, "flann_branching": 64, "flann_checks": 10 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 4, "flann_branching": 16, "flann_checks": 200 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 4, "flann_branching": 16, "flann_checks": 20 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "FLANN", "flann_iterations": 4, "flann_branching": 16, "flann_checks": 10 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "WORDS", "bow_num_checks": 100 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "WORDS", "bow_num_checks": 20 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "WORDS", "bow_num_checks": 5 },
+        { "lowes_ratio": lowes_ratio, "matcher_type": "CASCADE_HASHING" },
     ]
 
     bench_results =  []
