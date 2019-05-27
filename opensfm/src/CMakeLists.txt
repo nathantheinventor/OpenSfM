@@ -55,6 +55,11 @@ include_directories(${GLOG_INCLUDE_DIR})
 find_package(OpenCV REQUIRED core imgproc calib3d)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
+find_package(MKL QUIET)
+if(MKL_FOUND)
+    include_directories(${MKL_INCLUDE_DIR})
+    add_definitions(-DEIGEN_USE_BLAS)
+endif()
 
 # Akaze
 include_directories(third_party/akaze/lib/)
@@ -109,17 +114,24 @@ pybind11_add_module(csfm
     depthmap.cc
     theia_bind.cc
 )
-target_link_libraries(csfm PRIVATE
-    ${OpenCV_LIBS}
-    ${GFLAGS_LIBRARY}
-    ${GLOG_LIBRARY}
-    ${CERES_LIBRARIES}
-    ${LAPACK_LIBRARIES}
-    ${SUITESPARSE_LIBRARIES}
-    vl
-    akaze
-    theia
-)
+
+# Linking
+# Required libraries
+set(CSFM_LIBRARIES ${OpenCV_LIBS}  
+                    ${GFLAGS_LIBRARY} 
+                    ${GLOG_LIBRARY}
+                    ${CERES_LIBRARIES}
+                    ${LAPACK_LIBRARIES}
+                    ${SUITESPARSE_LIBRARIES}
+                    ${MKL_LIBRARIES}
+                    vl
+                    akaze
+                    theia)
+# Optional ones
+if(MKL_FOUND)
+    set(CSFM_LIBRARIES ${CSFM_LIBRARIES} ${MKL_LIBRARIES})
+endif()
+target_link_libraries(csfm PRIVATE ${CSFM_LIBRARIES})
 set_target_properties(csfm PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${opensfm_SOURCE_DIR}/.."
 )
