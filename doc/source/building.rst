@@ -27,6 +27,10 @@ OpenSfM depends on the following libraries that need to be installed before buil
 * `Ceres Solver`_
 * NumPy_, SciPy_, Networkx_, PyYAML, exifread
 
+Optionaly, it depends also on
+
+ * Intel MKL to speed-up features brute-force matching
+
 
 Installing dependencies on Ubuntu
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -35,13 +39,32 @@ If using Python 2, see this `Dockerfile <https://github.com/paulinus/opensfm-doc
 
 If using Python 3, follow the process here `Dockerfile.python3 <https://github.com/paulinus/opensfm-docker-base/blob/master/Dockerfile.python3>`_.
 
-The main steps are
+The main steps for required dependencies
 
 1. Install OpenCV, NumPy, SciPy using apt-get
 2. Install python requirements using pip
 3. Clone, build and install OpenGV following the receipt in the Dockerfile
 4. `Build and Install <http://ceres-solver.org/installation.html>`_ the Ceres solver from its source using the ``-fPIC`` compilation flag.
 
+Additionnal steps for installing optional dependencies
+
+1. Intel MKL
+    Run the following to install the Intel MKL::
+
+        wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2019.PUB
+        sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS-2019.PUB
+        sudo sh -c 'echo deb https://apt.repos.intel.com/mkl all main > /etc/apt/sources.list.d/intel-mkl.list'
+        sudo apt-get update
+        sudo apt-get install intel-mkl-64bit-2019.4.070
+
+    If you have trouble running opensfm with MKL with the following error message::
+
+        INTEL MKL ERROR: /opt/intel/mkl/lib/intel64/libmkl_avx2.so: undefined symbol: mkl_sparse_optimize_bsr_trsm_i8.
+        Intel MKL FATAL ERROR: Cannot load libmkl_avx2.so or libmkl_def.so.
+
+    Fix it by running the following export command before running opensfm::
+
+        export LD_PRELOAD=/opt/intel/mkl/lib/intel64/libmkl_def.so:/opt/intel/mkl/lib/intel64/libmkl_avx2.so:/opt/intel/mkl/lib/intel64/libmkl_core.so:/opt/intel/mkl/lib/intel64/libmkl_intel_lp64.so:/opt/intel/mkl/lib/intel64/libmkl_intel_thread.so:/opt/intel/lib/intel64_lin/libiomp5.so
 
 Installing dependencies on MacOSX
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -69,6 +92,9 @@ Make sure you update your ``PYTHONPATH`` to include ``/usr/local/lib/python2.7/s
 .. note:: Note on OpenCV 3
     When running OpenSfM on top of OpenCV version 3.0 the `OpenCV Contrib`_ modules are required for extracting SIFT or SURF features.
 
+Additionnal steps for installing optional dependencies
+
+1. Intel MKL TODO
 
 Building the library
 --------------------
