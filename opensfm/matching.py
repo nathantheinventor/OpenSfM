@@ -46,6 +46,39 @@ def match_words_symmetric(f1, words1, f2, words2, config):
     return np.array(list(matches), dtype=int)
 
 
+def match_matrix(f1, f2, config):
+    """Match using brute-force leveraging matrix-matrix BLAS
+       and apply Lowe's ratio filter.
+
+    Args:
+        f1: feature descriptors of the first image
+        f2: feature descriptors of the second image
+        config: config parameters
+    """
+    ratio = config['lowes_ratio']
+    matches_ij, _ = csfm.match_using_matrix(f1, f2, ratio, False)
+    return matches_ij
+
+
+def match_matrix_symmetric(f1, f2, config):
+    """Match using brute-force in both directions and keep consistent matches.
+
+    Args:
+        f1: feature descriptors of the first image
+        f2: feature descriptors of the second image
+        config: config parameters
+    """
+    ratio = config['lowes_ratio']
+    f1 = f1 / np.linalg.norm(f1, axis=1, keepdims=True)
+    f2 = f2 / np.linalg.norm(f2, axis=1, keepdims=True)
+    matches_ij, matches_ji = csfm.match_using_matrix(f1, f2, ratio, True)
+    matches_ij = [(a, b) for a, b in matches_ij]
+    matches_ji = [(b, a) for a, b in matches_ji]
+
+    matches = set(matches_ij).intersection(set(matches_ji))
+    return np.array(list(matches), dtype=int)
+
+
 def match_flann(index, f2, config):
     """Match using FLANN and apply Lowe's ratio filter.
 
@@ -92,18 +125,34 @@ def match_brute_force(f1, f2, config):
         matcher_type = 'BruteForce-Hamming'
     else:
         matcher_type = 'BruteForce'
+    f1 = f1 / np.linalg.norm(f1, axis=1, keepdims=True)
+    f2 = f2 / np.linalg.norm(f2, axis=1, keepdims=True)
     matcher = cv2.DescriptorMatcher_create(matcher_type)
     matches = matcher.knnMatch(f1, f2, k=2)
+    good_matches = _apply_lowes_ratio(matches, config['lowes_ratio'])
+    return np.array(good_matches, dtype=int)
 
-    ratio = config['lowes_ratio']
+
+def match_brute_force_matrix(f1, f2, config):
+    """Brute force matching leveraging matrix-matrix BLAS
+       multiplication and Lowe's ratio filtering.
+
+    Args:
+        f1: feature descriptors of the first image
+        f2: feature descriptors of the second image
+        config: config parameters
+    """
+    assert(f1.dtype.type == f2.dtype.type)
+
+
+def _apply_lowes_ratio(matches, ratio):
     good_matches = []
     for match in matches:
         if match and len(match) == 2:
             m, n = match
             if m.distance < ratio * n.distance:
                 good_matches.append(m)
-    good_matches = _convert_matches_to_vector(good_matches)
-    return np.array(good_matches, dtype=int)
+    return _convert_matches_to_vector(good_matches)
 
 
 def _convert_matches_to_vector(matches):

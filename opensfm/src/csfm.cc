@@ -74,6 +74,8 @@ PYBIND11_MODULE(csfm, m) {
 
   m.def("match_using_words", csfm::match_using_words);
 
+  m.def("match_using_matrix", csfm::match_using_matrix);
+
   m.def("match_using_cascade_hashing", csfm::match_using_cascade_hashing);
 
   m.def("triangulate_bearings_dlt", csfm::TriangulateBearingsDLT);

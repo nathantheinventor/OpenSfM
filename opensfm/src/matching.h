@@ -11,4 +11,9 @@ py::object match_using_words(pyarray_f features1,
                              float lowes_ratio,
                              int max_checks);
 
+py::object match_using_matrix(pyarray_f features1,
+                              pyarray_f features2,
+                              float lowes_ratio,
+                              bool symmetric);
+
 }
