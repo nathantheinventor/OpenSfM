@@ -1,5 +1,7 @@
 import logging
+import math
 from itertools import combinations
+from collections import defaultdict
 import numpy as np
 
 import scipy.spatial as spatial
@@ -54,20 +56,84 @@ def bow_distances(image, other_images, words, masks, bows):
     return np.argsort(distances), other
 
 
+def _sign(x):
+    return -1.0 if x < 0. else 1.0
+
+
 def match_candidates_with_bow(data, images, max_neighbors):
     """Find candidate matching pairs using BoW-based distance."""
+    # if max_neighbors <= 0:
+    #     return set()
+
+    # words = {im: data.load_words(im) for im in images}
+    # bows = bow.load_bows(data.config)
+
+    # pairs = set()
+    # for im in images:
+    #     order, other = bow_distances(im, images, words, None, bows)
+    #     for i in order[:max_neighbors]:
+    #         pairs.add(tuple(sorted((im, other[i]))))
+    # return pairs
+
     if max_neighbors <= 0:
         return set()
 
-    words = {im: data.load_words(im) for im in images}
-    bows = bow.load_bows(data.config)
+    desc_size = 128
+    vlad_count = 64
+
+    words, _ = bow.load_bow_words_and_frequencies(data.config)
+    vlads = words[:vlad_count]
+
+    # Center re-adaptation : recompute centers based on BoW assignments
+    centered_count = [0] * words.shape[0]
+    centered_words = np.zeros((words.shape), dtype=np.float32)
+    for im in images:
+        words_indexes = data.load_words(im)[:, 0]
+        _, features, _ = data.load_features(im)
+        for i in range(len(words_indexes)):
+            centered_words[words_indexes[i]] += features[i]
+            centered_count[words_indexes[i]] += 1
+    for i in range(len(centered_count)):
+        count = centered_count[i]
+        if count == 0:
+            centered_words[i] = words[i]
+        else:
+            centered_words[i] /= count
+
+    vlads = centered_words[:vlad_count]
+
+    image_vlads = {}
+    for im in images:
+        _, features, _ = data.load_features(im)
+        vlad = np.zeros((vlad_count, desc_size), dtype=np.float32)
+        # VLAD itself
+        for f in features:
+            vlad[:, :] += f-vlads
+        # Intra-normalization : should suppress burstyness
+        # for i in range(vlad_count):
+        #     vlad[i] /= np.linalg.norm(vlad[i])
+        vlad = np.ndarray.flatten(vlad)
+        # Square-rooting
+        for i in range(desc_size):
+            vlad[i] = _sign(vlad[i])*math.sqrt(math.fabs(vlad[i]))
+        vlad /= np.linalg.norm(vlad)
+        image_vlads[im] = vlad
+
+    distances_per_image = defaultdict(dict)
+    for im1, im2 in combinations(images, 2):
+        d = np.linalg.norm(image_vlads[im1]-image_vlads[im2])
+        distances_per_image[im1][im2] = d
+        distances_per_image[im2][im1] = d
 
     pairs = set()
     for im in images:
-        order, other = bow_distances(im, images, words, None, bows)
+        candidates = distances_per_image[im].items()
+        order = np.argsort([x[1] for x in candidates])
+        other = [x[0] for x in candidates]
         for i in order[:max_neighbors]:
             pairs.add(tuple(sorted((im, other[i]))))
     return pairs
+
 
 
 def match_candidates_by_distance(images, exifs, reference, max_neighbors, max_distance):
