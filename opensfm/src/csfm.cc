@@ -8,6 +8,7 @@
 #include "multiview.cc"
 #include "akaze_bind.h"
 #include "theia_bind.h"
+#include "matching.h"
 #include "bundle/bundle_adjuster.h"
 #include "openmvs_exporter.h"
 #include "depthmap_bind.h"
