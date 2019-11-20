@@ -104,7 +104,7 @@ def get_xmp(fileobj):
     xmp_end = img_str.find('</x:xmpmeta')
 
     if xmp_start < xmp_end:
-        xmp_str = img_str[xmp_start:xmp_end + 12]
+        xmp_str = img_str[xmp_start:xmp_end + 12].replace("\\n", "")
         xdict = x2d.parse(xmp_str)
         xdict = xdict.get('x:xmpmeta', {})
         xdict = xdict.get('rdf:RDF', {})
